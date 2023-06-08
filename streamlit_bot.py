@@ -37,8 +37,6 @@ if os.environ["OPENAI_API_KEY"] is None:
     st.error("No OpenAI API key found. Please set one as an environment variable called OPENAI_API_KEY")
     st.stop()
 
-st.write(os.environ["OPENAI_API_KEY"])
-
 st.session_state.all_messages = []
 
 def save_uploaded_file(uploadedfile):
