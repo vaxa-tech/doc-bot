@@ -21,7 +21,7 @@ It's intended to demonstrate how you could extract insight and knowledge vast qu
 without needing to know exactly where they're stored, or the exact term to search for. 
 
 While Doc-Bot only looks at 
-one document at a time, the exact same technology can be used to explore hundreds or thousands of documents at once.
+one document at a time, the exact same technology can be used to explore hundreds or even thousands of documents at once.
 
 **It uses the most modern AI natural language processing techniques to understand the meaning of your questions,
 and then uses that understanding to find the most relevant answers from your documents.**
@@ -29,8 +29,15 @@ and then uses that understanding to find the most relevant answers from your doc
 
 st.write('---')
 
-openai_key = config('OPENAI_API_KEY')
-os.environ["OPENAI_API_KEY"] = openai_key
+if os.environ.get("OPENAI_API_KEY", None) is None:
+    openai_key = config('OPENAI_API_KEY')
+    os.environ["OPENAI_API_KEY"] = openai_key
+
+if os.environ["OPENAI_API_KEY"] is None:
+    st.error("No OpenAI API key found. Please set one as an environment variable called OPENAI_API_KEY")
+    st.stop()
+
+st.write(os.environ["OPENAI_API_KEY"])
 
 st.session_state.all_messages = []
 
