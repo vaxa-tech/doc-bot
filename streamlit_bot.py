@@ -5,109 +5,87 @@ import time
 import streamlit as st
 from datetime import datetime
 from streamlit_chat import message
-from llama_index import GPTSimpleVectorIndex, SimpleDirectoryReader
+from llama_index import GPTVectorStoreIndex, SimpleDirectoryReader
+from decouple import config
+import tempfile
 
 
-st.markdown("<h1 style='text-align: center; color: red;'>Doc-Bot👋</h1>", unsafe_allow_html=True)
+# buf1, col, buf2 = st.columns([3, 1, 3])
+st.image('VA_Marque_Color_width500px.png', width=50, output_format='PNG')
+st.markdown("<h1 style='text-align: left; color: #fbaa36;'>Doc-Bot</h1>", unsafe_allow_html=True)
+st.write("""
+Doc-Bot is a demo chatbot that answers questions about uploaded documents. 
 
-buff, col, buff2 = st.columns([1,3,1])
-openai_key = col.text_input('OpenAI Key:')
+
+It's intended to demonstrate how you could extract insight and knowledge vast quantities of documentation, all 
+without needing to know exactly where they're stored, or the exact term to search for. 
+
+While Doc-Bot only looks at 
+one document at a time, the exact same technology can be used to explore hundreds or thousands of documents at once.
+
+**It uses the most modern AI natural language processing techniques to understand the meaning of your questions,
+and then uses that understanding to find the most relevant answers from your documents.**
+""")
+
+st.write('---')
+
+openai_key = config('OPENAI_API_KEY')
 os.environ["OPENAI_API_KEY"] = openai_key
 
-
-if 'all_messages' not in st.session_state:
-    st.session_state.all_messages = []
+st.session_state.all_messages = []
 
 def save_uploaded_file(uploadedfile):
   with open(os.path.join("data",uploadedfile.name),"wb") as f:
      f.write(uploadedfile.getbuffer())
 
-# Create a function to get bot response
-def get_bot_response(user_query):
-    response = index.query(user_query)
-    return str(response)
+setup_container = st.container()
+# container for chat history
+response_container = st.container()
+# container for text box
+container = st.container()
 
-# Create a function to display messages
-def display_messages(all_messages):
-    for msg in all_messages:
-        if msg['user'] == 'user':
-            message(f"You ({msg['time']}): {msg['text']}", is_user=True, key=int(time.time_ns()))
-        else:
-            message(f"Bot ({msg['time']}): {msg['text']}", key=int(time.time_ns()))
-
-# Create a function to send messages
-def send_message(user_query, all_messages):
-    if user_query:
-        all_messages.append({'user': 'user', 'time': datetime.now().strftime("%H:%M"), 'text': user_query})
-        bot_response = get_bot_response(user_query)
-        all_messages.append({'user': 'bot', 'time': datetime.now().strftime("%H:%M"), 'text': bot_response})
-
-        st.session_state.all_messages = all_messages
-        
-    
-# Create a list to store messages
+st.session_state['document_read'] = False
 
 
-datafile = st.file_uploader("Upload your doc",type=['docx', 'doc', 'pdf'])
-if datafile is not None:
-    if not os.path.exists('./data'):
-        os.mkdir('./data')
-    save_uploaded_file(datafile)
-    documents = SimpleDirectoryReader('data').load_data()
-    index = GPTSimpleVectorIndex.from_documents(documents)
+with setup_container: 
+    if not st.session_state['document_read']:
+        datafile = st.file_uploader("Upload your document (must contain highlightable text)",type=['docx', 'doc', 'pdf'],
+                                    help="Upload a document to be read by the bot", accept_multiple_files=False)
 
-    index.save_to_disk('index.json')
+        if datafile is not None:
+            # load datafile to a temp directory
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                with open(os.path.join(tmp_dir, datafile.name),"wb") as f:
+                    f.write(datafile.getbuffer())
 
-    index = GPTSimpleVectorIndex.load_from_disk('index.json')
+                with st.spinner('Our bot is currently reading your doc...'):
+                    documents = SimpleDirectoryReader(tmp_dir).load_data()
+                    index = GPTVectorStoreIndex.from_documents(documents)
+                    query_engine = index.as_chat_engine()
+                    st.session_state['document_read'] = True
 
-    # Create input text box for user to send messages
-    user_query = st.text_input("You: ","", key= "input")
+                st.write('---')
 
-    # Create a button to send messages
-    send_button = st.button("Send")
+if st.session_state.get('document_read', False):
+    with st.form(key='my_form', clear_on_submit=True):
+        user_query = st.text_area("You:", key='input', height=100)
+        submit_button = st.form_submit_button(label='Send')
 
-    # Send message when button is clicked
-    if send_button:
-        send_message(user_query, st.session_state.all_messages)
-        display_messages(st.session_state.all_messages)
+        if submit_button and user_query:
+            with response_container:
+                st.session_state.all_messages.append(
+                    {'is_user': True, 'message': user_query, 'time': time.time_ns()}
+                )
+                for _msg in st.session_state.all_messages:
+                    message(f"{_msg['message']}", is_user=_msg['is_user'], key=_msg['time'])
 
-    
+                # get our query response
+                with st.spinner('Thinking...'):
+                    query_response = str(query_engine.chat(user_query)).strip()
+                    query_response_time = time.time_ns()
+                message(f"{query_response}", is_user=False, key=query_response_time)
 
-    
-
-    
-       
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-       
+                # store the response
+                st.session_state.all_messages.append(
+                    {'is_user': False, 'message': str(query_response), 'time': query_response_time}
+                )
